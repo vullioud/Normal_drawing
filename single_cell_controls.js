@@ -1,5 +1,4 @@
 let gui;
-let saveSVG = false;
 let controls = {
   numCurves: 5,
   angle: 7.2,
@@ -36,6 +35,8 @@ let controls = {
     rotationRange: 360  // New parameter for circular rotation range
   }
 };
+
+let exportSVG = false;
 
 function setup() {
   const canvas = createCanvas(800, 800);
@@ -135,10 +136,25 @@ function setup() {
   // Add scale control after basic controls
   createSliderControl('scale', 0.1, 5, 1, 'Scale');
 
-  // Export button
+  // Modify the Export button
   createButton('Export SVG')
     .mousePressed(() => {
-      saveSVG = true;
+      // Create a new SVG renderer
+      let svgCanvas = createGraphics(width, height, SVG);
+      
+      // Draw on SVG canvas
+      svgCanvas.background(255);
+      svgCanvas.push();
+      drawCell(svgCanvas, true);
+      svgCanvas.pop();
+      
+      // Save SVG
+      const timestamp = year() + nf(month(), 2) + nf(day(), 2) + "_" + 
+                       nf(hour(), 2) + nf(minute(), 2) + nf(second(), 2);
+      svgCanvas.save("gaussian_pattern_" + timestamp + ".svg");
+      
+      // Clean up
+      svgCanvas.remove();
       redraw();
     })
     .parent(gui);
@@ -216,17 +232,15 @@ function updateMeanControls() {
 }
 
 function draw() {
-  background(51); // Dark grey background
-  if (saveSVG) {
-    const renderer = createGraphics(width, height, SVG);
-    drawCell(renderer);
-    renderer.save('gaussian_cell.svg');
-    saveSVG = false;
+  if (!exportSVG) {
+    background(51);  // Dark background for screen only
+  } else {
+    background(255);  // White background for SVG
   }
-  drawCell();
+  drawCell(this, exportSVG);
 }
 
-function drawCell(renderer = null) {
+function drawCell(renderer = null, isSVG = false) {
   const ctx = renderer || this;
   const size = min(width, height) * 0.6 * controls.scale;
   
@@ -284,7 +298,14 @@ function drawCell(renderer = null) {
   ctx.push();
   ctx.translate(width/2 + centerOffsetX, height/2 + centerOffsetY);
   ctx.noFill();
-  ctx.strokeWeight(2);
+  
+  // Set stroke properties based on export mode
+  if(isSVG) {
+    ctx.stroke(0);
+    ctx.strokeWeight(1);
+  } else {
+    ctx.strokeWeight(2);
+  }
 
   // Second pass: draw curves
   for (let i = 0; i < controls.numCurves; i++) {
@@ -340,69 +361,76 @@ function drawCell(renderer = null) {
     ctx.push();
     ctx.translate(x, y);
     ctx.rotate(rotation);
-    drawGaussianCurve(ctx, 0, 0, size * 0.3, sd, mean, t);
+    drawGaussianCurve(ctx, 0, 0, size * 0.3, sd, mean, t, isSVG);
     ctx.pop();
   }
   ctx.pop();
 }
 
-function drawGaussianCurve(ctx, x, y, size, sd, mean, t) {
-  const amplitude = size/2;
-  const scaledSD = sd * size;
-  const scaledMean = mean * size;
-  
-  const minX = lerp(controls.curveRange.firstMin, controls.curveRange.lastMin, t);
-  const maxX = lerp(controls.curveRange.firstMax, controls.curveRange.lastMax, t);
-  const midX = (minX + maxX) / 2;
-  
-  const step = (maxX - minX) / 100;
-  let lastX, lastY;
-  
-  // Draw line segments with gradients
-  for (let i = minX; i <= maxX - step; i += step) {
-    const xPos1 = x + i * size;
-    const xPos2 = x + (i + step) * size;
+function drawGaussianCurve(ctx, x, y, size, sd, mean, t, isSVG = false) {
+  if (isSVG) {
+    ctx.beginShape();
+    const minX = lerp(controls.curveRange.firstMin, controls.curveRange.lastMin, t);
+    const maxX = lerp(controls.curveRange.firstMax, controls.curveRange.lastMax, t);
+    const step = (maxX - minX) / 100;
     
-    const exponent1 = -pow((i - mean)/sd, 2)/2;
-    const exponent2 = -pow((i + step - mean)/sd, 2)/2;
-    
-    const yOffset1 = amplitude * exp(exponent1);
-    const yOffset2 = amplitude * exp(exponent2);
-    
-    // Calculate colors for both points
-    let colorT1, colorT2;
-    
-    if (i <= midX) {
-      colorT1 = map(i, minX, midX, 0, 1);
-    } else {
-      colorT1 = map(i, midX, maxX, 1, 0);
+    for (let i = minX; i <= maxX; i += step) {
+      const xPos = x + i * size;
+      const exponent = -pow((i - mean)/sd, 2)/2;
+      const yOffset = (size/2) * exp(exponent);
+      ctx.vertex(xPos, y - yOffset);
     }
+    ctx.endShape();
+  } else {
+    // Normal gradient drawing for screen display
+    const amplitude = size/2;
+    const scaledSD = sd * size;
+    const scaledMean = mean * size;
     
-    if (i + step <= midX) {
-      colorT2 = map(i + step, minX, midX, 0, 1);
-    } else {
-      colorT2 = map(i + step, midX, maxX, 1, 0);
+    const minX = lerp(controls.curveRange.firstMin, controls.curveRange.lastMin, t);
+    const maxX = lerp(controls.curveRange.firstMax, controls.curveRange.lastMax, t);
+    const midX = (minX + maxX) / 2;
+    
+    const step = (maxX - minX) / 100;
+    
+    for (let i = minX; i <= maxX - step; i += step) {
+      const xPos1 = x + i * size;
+      const xPos2 = x + (i + step) * size;
+      
+      const exponent1 = -pow((i - mean)/sd, 2)/2;
+      const exponent2 = -pow((i + step - mean)/sd, 2)/2;
+      
+      const yOffset1 = amplitude * exp(exponent1);
+      const yOffset2 = amplitude * exp(exponent2);
+      
+      let colorT1, colorT2;
+      
+      if (i <= midX) {
+        colorT1 = map(i, minX, midX, 0, 1);
+      } else {
+        colorT1 = map(i, midX, maxX, 1, 0);
+      }
+      
+      if (i + step <= midX) {
+        colorT2 = map(i + step, minX, midX, 0, 1);
+      } else {
+        colorT2 = map(i + step, midX, maxX, 1, 0);
+      }
+      
+      const c1 = lerpColor(
+        color(controls.colors.bottom),
+        color(controls.colors.top),
+        colorT1
+      );
+      
+      const c2 = lerpColor(
+        color(controls.colors.bottom),
+        color(controls.colors.top),
+        colorT2
+      );
+      
+      drawGradientLine(ctx, xPos1, y - yOffset1, xPos2, y - yOffset2, c1, c2);
     }
-    
-    const c1 = lerpColor(
-      color(controls.colors.bottom),
-      color(controls.colors.top),
-      colorT1
-    );
-    
-    const c2 = lerpColor(
-      color(controls.colors.bottom),
-      color(controls.colors.top),
-      colorT2
-    );
-    
-    // Draw gradient line segment
-    drawGradientLine(
-      ctx,
-      xPos1, y - yOffset1,
-      xPos2, y - yOffset2,
-      c1, c2
-    );
   }
 }
 

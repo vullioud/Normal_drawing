@@ -1,7 +1,7 @@
 # Normal Curve Pattern Generator
 
 An interactive tool for creating artistic patterns using normal distribution (Gaussian) curves. Built with p5.js and with the help of deepseek this project allows you to manipulate and arrange multiple normal curves in various configurations.
-
+It is based on a old project I did using R and Julia, with the interactive part on top. 
 ## Features
 
 - **Interactive Controls**
